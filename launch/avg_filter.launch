@@ -1,9 +1,9 @@
 <launch>
     <arg name='active_filters'  default='$(find twist_filter)/config/active_filters_default.yaml' />
     <arg name='filter_config'   default='$(find twist_filter)/config/default_avg.yaml' />
-    <arg name='filter_name'     default='fir_twist_filter' />
-    <arg name='input_topic'     default='joy_out' />
-    <arg name='output_topic'    default='filter_out' />
+    <arg name='filter_name'     default='avg_twist_filter' />
+    <arg name='input_topic'     default='/path_controller/cmd_vel' />
+    <arg name='output_topic'    default='/avg_twist_filter/filter_out' />
 
     <!-- Launch filter -->
     <node name='$(arg filter_name)' pkg='twist_filter' type='init_fir.py' output='screen'>

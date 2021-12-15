@@ -2,7 +2,8 @@
 import rospy
 import math
 import copy
-from geometry_msgs.msg import Twist
+from std_msgs.msg import Header
+from geometry_msgs.msg import Twist,TwistStamped
 from dynamic_reconfigure.server import Server
 from twist_filter.cfg import FilterConfig
 
@@ -25,8 +26,8 @@ class TwistFilter(object):
         self.twist_prev = Twist()
 
         # Set up publishers/subscribers
-        self.sub_cmd_in = rospy.Subscriber('filter_in', Twist, self.update_twist)
-        self.pub_cmd_out = rospy.Publisher('filter_out', Twist, queue_size=10)
+        self.sub_cmd_in = rospy.Subscriber('filter_in', TwistStamped, self.update_twist)
+        self.pub_cmd_out = rospy.Publisher('filter_out', TwistStamped, queue_size=1)
 
         # Uncomment to publish smoothed twist without velocity/acceleration filtering
         # self.pub_cmd_smoothed = rospy.Publisher('filter_smooth', Twist, queue_size=10)
@@ -34,8 +35,10 @@ class TwistFilter(object):
         # Start command publisher
         self.stopped = False
         self.cmd = Twist()
+        self.cmd_header = Header()
         self.prev_time = rospy.Time.now()
-        self.cmd_publisher = rospy.Timer(rospy.Duration(1.0/50.0), self.pub_cmd)
+        self.current_time = rospy.Time.now()
+        # self.cmd_publisher = rospy.Timer(rospy.Duration(1.0/50.0), self.pub_cmd)
 
         rospy.loginfo(rospy.get_name() + ': Twist filters ready!')
 
@@ -57,27 +60,36 @@ class TwistFilter(object):
         return config
 
     def update_twist(self, data):
-        self.cmd = data
-        self.prev_time = rospy.Time.now()
+        self.cmd = data.twist
+        # self.prev_time = rospy.Time.now()
+        self.cmd_header = data.header
+        self.current_time = data.header.stamp
 
-    def pub_cmd(self, event):
-        # Reset twist if we havent gotten an input for specified timeout
-        if rospy.Time.now().to_sec() - self.prev_time.to_sec() > self.timeout:
-            cmd = self.filter_twist(Twist())
-        # Otherwise calculate output twist
-        else:
-            cmd = self.filter_twist(self.cmd)
+        self.pub_cmd()
+
+    def pub_cmd(self):
+
+        if (self.prev_time == self.current_time):
+            return
+
+        cmd = self.filter_twist(self.cmd)
+
+        twist_msg = TwistStamped()
+        twist_msg.header = self.cmd_header
+        twist_msg.twist = cmd
 
         # If a zero twist is calculated, publish only once
         if cmd == Twist():
             if not self.stopped:
-                self.pub_cmd_out.publish(cmd)
+                self.pub_cmd_out.publish(twist_msg)
                 self.stopped = True
         # Otherwise keep publishing
         else:
             self.stopped = False
             if cmd is not None:
-                self.pub_cmd_out.publish(cmd)
+                self.pub_cmd_out.publish(twist_msg)
+        self.prev_time = self.current_time
+
 
     def filter_twist(self, data):
         # Get filtered response and scale to max linear and angular velocities
@@ -91,14 +103,14 @@ class TwistFilter(object):
         # self.pub_cmd_smoothed.publish(cmd_out)
 
         # Get time step
-        time_now = rospy.Time.now()
+        time_now = self.current_time# rospy.Time.now()
         time_delta = time_now.to_sec() - self.time_prev.to_sec()
 
         # Saturate at max velocities and scale
         if self.linear_vel_max > 0 or self.angular_vel_max > 0:
             cmd_out = self._saturate_vel(cmd_out, self.linear_vel_max, self.angular_vel_max)
 
-        # Saturate at max accelerations and scale
+        # # Saturate at max accelerations and scale
         if (self.linear_acc_max > 0 or self.angular_acc_max > 0) and time_delta > 0.00001:
             cmd_out = self._saturate_acc(cmd_out, self.linear_acc_max, self.angular_acc_max, time_delta)
 

@@ -1,9 +1,9 @@
 active_filters:
   linear:
     x: true
-    y: false
-    z: false
+    y: true
+    z: true
   angular:
-    x: false
-    y: false
+    x: true
+    y: true
     z: true
